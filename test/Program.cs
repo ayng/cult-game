@@ -71,10 +71,6 @@ public class Simulation
     {
         turn += t;
 
-        // Update followers and money amounts.
-        resources.Followers = Math.Max(resources.Followers + t * followersPerReputation * resources.Reputation, 0f);
-        resources.Money = Math.Max(resources.Money + t * incomePerFollower * resources.Followers, 0f);
-
         if (scheduled.ContainsKey(turn))
         {
             foreach (Action a in scheduled[turn]) {
@@ -179,6 +175,13 @@ public class Simulation
                 new Resources(0, 3, 0, 0)
             ));
         }
+        if (r.Reputation > .6f)
+        {
+            e.Add(new Event(t,
+                "People are joining your organization in droves.",
+                new Resources(0, 12, 0, 0)
+            ));
+        }
         if (t == 5)
         {
             e.Add(new Event(t,
@@ -190,15 +193,14 @@ public class Simulation
                            new Resources(-10, 0, 0, 0),
                            new Resources(0, 3, .1f, 0),
                            new Resources(0, 0, 0, 0)
+                    ),
+                    new Action("Build lore", 5,
+                           new Resources(250, 0, 0, 0),
+                           new Resources(-250, 0, 0, 0),
+                           new Resources(0, 0, .4f, .1f),
+                           new Resources(0, 0, 0, 0)
                     )
                 })
-            ));
-        }
-        if (t == 10)
-        {
-            e.Add(new Event(t,
-                "A powerful politician denounces your organization.",
-                new Resources(0, -10, -.1f, -.5f)
             ));
         }
         if (t == 15)
@@ -211,6 +213,48 @@ public class Simulation
                            new Resources(100, 0, 0, .3f),
                            new Resources(-100, 0, 0, 0),
                            new Resources(1000, 0, .1f, .1f),
+                           new Resources()
+                    ),
+                    new Action(
+                        "Ask followers for donations",
+                        1,
+                        new Resources(0, 3, .3f, 0),
+                        new Resources(0, -3, -.1f, 0),
+                        new Resources(50, 0, 0, 0),
+                        new Resources()
+                    )
+                })
+            ));
+        }
+        if (t == 18)
+        {
+            e.Add(new Event(t,
+                "John Smith, a powerful politician, denounces your organization.",
+                new Resources(0, -4, -.1f, -.2f)
+            ));
+        }
+        if (t == 25)
+        {
+            e.Add(new Event(t,
+                "Jack McJack joins your organization.",
+                new Resources(0, 1, 0, 0),
+                new Character("Jack McJack", "Sociopath", "Murder", new Action[]{
+                    new Action("Human sacrifice", 1,
+                           new Resources(0, 1, 1, 0),
+                           new Resources(0, -1, 0, 0),
+                           new Resources(0, 0, .5f, -.5f),
+                           new Resources()
+                    ),
+                    new Action("Assassinate John Smith", 1,
+                           new Resources(100, 1, 0, 0),
+                           new Resources(-100, -1, 0, 0),
+                           new Resources(0, 1, .5f, -1.0f),
+                           new Resources()
+                    ),
+                    new Action("Mass suicide", 1,
+                           new Resources(0, 20, 1, 0),
+                           new Resources(0, -20, 0, 0),
+                           new Resources(0, 0, 0, -3),
                            new Resources()
                     )
                 })
@@ -259,7 +303,7 @@ public class Simulation
             s += "EVENTS\n";
             foreach (var e in events)
             {
-                s += "Turn " + e.Turn + ": " + e.Name + "\n";
+                s += "Turn " + e.Turn + ": " + e.Name + " (" + e.Change.Short() + ")" + "\n";
             }
 
         }
@@ -318,10 +362,10 @@ public class Resources
 
     public void Add(Resources other)
     {
-        Money += other.Money;
-        Followers += other.Followers;
-        Belief += other.Belief;
-        Reputation += other.Reputation;
+        Money = Math.Max(0, Money + other.Money);
+        Followers = Math.Max(0, Followers + other.Followers);
+        Belief = Math.Max(0, Belief + other.Belief);
+        Reputation = Math.Max(0, Reputation + other.Reputation);
     }
 
     public bool More(Resources other) {
