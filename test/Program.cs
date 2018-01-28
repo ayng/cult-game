@@ -25,7 +25,7 @@ public class Simulation
 
     private List<Event> events;
 
-    private Dictionary<int, Action> scheduled;
+    private Dictionary<int, List<Action>> scheduled;
 
     public Simulation()
     {
@@ -34,28 +34,36 @@ public class Simulation
         people = new List<Character>();
 
         // money, followers, belief, reputation
-        resources = new Resources(100, 1, -0.5f, 0.5f);
+        resources = new Resources(100, 1, 0, 0);
 
         // List of possible actions.
         possible = new List<Action>();
         possible.Add(new Action(
-            "Publish a pamphlet",
+            "Study theology",
             3,
-            new Resources(50, 0, 0, 0),
-            new Resources(-50, 0, 0, 0),
-            new Resources(0, 0, 0, .1f),
+            new Resources(0, 1, 0, 0),
+            new Resources(0, -1, 0, 0),
+            new Resources(0, 1, .1f, .1f),
             new Resources(0, 0, 0, 0)
         ));
         possible.Add(new Action(
-            "Human sacrifice",
+            "Meditate",
             1,
-            new Resources(10, 1, .7f, 0),
-            new Resources(-10, -1, 0, 0),
-            new Resources(0, 0, .1f, -.5f),
-            new Resources(0, 1, -.1f, -.5f)
+            new Resources(0, 1, 0, 0), // requires nothing
+            new Resources(0, -1, 0, 0), // costs nothing
+            new Resources(0, 1, .1f, 0), // gives you some belief
+            new Resources()
+        ));
+        possible.Add(new Action(
+            "Door to door campaign",
+            1,
+            new Resources(20, 5, 0, .3f),
+            new Resources(-20, -5, 0, 0),
+            new Resources(0, 8, .1f, -.1f),
+            new Resources()
         ));
 
-        scheduled = new Dictionary<int, Action>();
+        scheduled = new Dictionary<int, List<Action>>();
         events = new List<Event>();
     }
 
@@ -69,11 +77,11 @@ public class Simulation
 
         if (scheduled.ContainsKey(turn))
         {
-            resources.Add(scheduled[turn].Succeed());
-            Console.WriteLine(">>> " + scheduled[turn] + " succeeded!");
-            Console.WriteLine("Rewards: ");
-
-            Console.WriteLine(scheduled[turn].Succeed());
+            foreach (Action a in scheduled[turn]) {
+                resources.Add(a.reward);
+                Console.WriteLine(">>> \"" + a.Name + "\" succeeded!");
+                Console.WriteLine(">>> Rewards: " + a.reward.Short());
+            }
             scheduled.Remove(turn);
         }
 
@@ -86,8 +94,27 @@ public class Simulation
 
     public void StartAction(Action a)
     {
-        scheduled.Add(turn + a.TurnCost, a);
-        resources.Add(a.Start());
+        // Check that there are sufficient resources.
+        if (resources.Money < a.prerequisites.Money) {
+            Console.WriteLine(">>> Insufficient funds.");
+            return;
+        } else if (resources.Followers < a.prerequisites.Followers) {
+            Console.WriteLine(">>> Insufficient followers.");
+            return;
+        } else if (resources.Belief < a.prerequisites.Belief) {
+            Console.WriteLine(">>> Insufficient belief.");
+            return;
+        } else if (resources.Reputation < a.prerequisites.Reputation) {
+            Console.WriteLine(">>> Insufficient reputation.");
+            return;
+        }
+        // Schedule the action to finish.
+        var end = turn + a.TurnCost;
+        if (!scheduled.ContainsKey(end)) {
+            scheduled.Add(end, new List<Action>());
+        }
+        scheduled[end].Add(a);
+        resources.Add(a.cost);
     }
 
     public List<Action> PossibleActions()
@@ -97,6 +124,15 @@ public class Simulation
 
     private void AddEvent(Event e)
     {
+        // HACK Check the string name of the event to make sure it only happens once.
+        foreach (var other in events)
+        {
+            if (e.Name == other.Name)
+            {
+                return;
+            }
+        }
+
         // Procure the event.
         resources.Add(e.Change);
         if (e.Recruit != null)
@@ -114,6 +150,7 @@ public class Simulation
         people.Add(c);
         foreach (var a in c.Actions)
         {
+            a.Name += " (" + c.Name + ")";
             possible.Add(a);
         }
     }
@@ -124,28 +161,35 @@ public class Simulation
         if (r.Belief > .5f)
         {
             e.Add(new Event(t,
-                "The conviction of your followers improves your cult's public image.",
+                "The conviction of your followers improves your public image.",
                 new Resources(0, 0, 0, .05f)
             ));
         }
-        if (r.Reputation > .5f)
+        if (r.Reputation > .1f)
         {
             e.Add(new Event(t,
-                "People seem to like your organization.",
+                "People are interested in your ideals.",
                 new Resources(0, 2, 0, 0)
+            ));
+        }
+        if (r.Reputation > .4f)
+        {
+            e.Add(new Event(t,
+                "Some newcomers have joined your group.",
+                new Resources(0, 3, 0, 0)
             ));
         }
         if (t == 5)
         {
             e.Add(new Event(t,
-                "You meet someone who changes the course of your organization.",
-                new Resources(0, 0, 0, 0),
-                new Character("Cathy McDonald", "Computer Programmer", "Occult", new Action[]{
-                    new Action("<cathy-action>", 3,
-                           new Resources(3, 3, 3, 3),
-                           new Resources(3, 3, 3, 3),
-                           new Resources(3, 3, 3, 3),
-                           new Resources(3, 3, 3, 3)
+                "Cathy McDonald joins your organization.",
+                new Resources(0, 1, 0, 0),
+                new Character("Cathy McDonald", "Writer", "Occult", new Action[]{
+                    new Action("Publish a pamphlet", 3,
+                           new Resources(10, 0, 0, 0),
+                           new Resources(-10, 0, 0, 0),
+                           new Resources(0, 3, .1f, 0),
+                           new Resources(0, 0, 0, 0)
                     )
                 })
             ));
@@ -153,8 +197,23 @@ public class Simulation
         if (t == 10)
         {
             e.Add(new Event(t,
-                "A powerful politician is denouncing your organization.",
+                "A powerful politician denounces your organization.",
                 new Resources(0, -10, -.1f, -.5f)
+            ));
+        }
+        if (t == 15)
+        {
+            e.Add(new Event(t,
+                "Arthur Sutherland joins your organization.",
+                new Resources(0, 1, 0, 0),
+                new Character("Arthur Sutherland", "Politician", "Sex", new Action[]{
+                    new Action("Lobby for government funding", 3,
+                           new Resources(100, 0, 0, .3f),
+                           new Resources(-100, 0, 0, 0),
+                           new Resources(1000, 0, .1f, .1f),
+                           new Resources()
+                    )
+                })
             ));
         }
         return e;
@@ -169,14 +228,21 @@ public class Simulation
         s += "ACTIONS\n";
         for (int i = 0; i < possible.Count; i++)
         {
-            s += (i + 1) + ". " + possible[i].Name + "\n";
+            s += (i + 1) + ". " + possible[i].Name + "\n" + 
+                          "  Takes " + possible[i].TurnCost + " turns" + "\n" +
+                          "  Requires: " + possible[i].prerequisites.Short() + "\n" +
+                          "  Costs:    " + possible[i].cost.Short() + "\n" +
+                          "  Returns:  " + possible[i].reward.Short() + "\n";
         }
         if (scheduled.Count > 0)
         {
             s += "SCHEDULED\n";
-            foreach (KeyValuePair<int, Action> entry in scheduled)
+            foreach (KeyValuePair<int, List<Action>> entry in scheduled)
             {
-                s += "Finishes on turn " + entry.Key + ": " + entry.Value + "\n";
+                s += "Finishes on turn " + entry.Key + ": " + "\n";
+                foreach (Action a in entry.Value) {
+                    s += "  " + a.Name + "\n";
+                }
             }
         }
         if (people.Count > 0)
@@ -207,10 +273,10 @@ public class Action
     public string Name;
     public int TurnCost;
 
-    private Resources prerequisites; // Check to know if action is possible.
-    private Resources cost;          // Change in resources upon starting.
-    private Resources reward;        // Change in resources upon success.
-    private Resources penalty;       // Change in resources upon failure. (unused)
+    public Resources prerequisites; // Check to know if action is possible.
+    public Resources cost;          // Change in resources upon starting.
+    public Resources reward;        // Change in resources upon success.
+    public Resources penalty;       // Change in resources upon failure. (unused)
 
 
     public Action(string n, int t, Resources p, Resources c, Resources r, Resources l)
@@ -221,22 +287,6 @@ public class Action
         cost = c;
         reward = r;
         penalty = l;
-    }
-
-    public Resources Start()
-    {
-        return cost;
-    }
-
-    public Resources Succeed()
-    {
-        return reward;
-    }
-
-    // unused
-    public Resources Fail()
-    {
-        return penalty;
     }
 
     public override string ToString()
@@ -252,6 +302,12 @@ public class Resources
     public float Belief;
     public float Reputation;
 
+    public Resources() {
+        Money = 0;
+        Followers = 0;
+        Belief = 0;
+        Reputation = 0;
+    }
     public Resources(float m, float f, float b, float r)
     {
         Money = m;
@@ -266,6 +322,22 @@ public class Resources
         Followers += other.Followers;
         Belief += other.Belief;
         Reputation += other.Reputation;
+    }
+
+    public bool More(Resources other) {
+        return Money > other.Money && 
+            Followers > other.Followers &&
+            Belief > other.Belief &&
+            Reputation > other.Reputation;
+    }
+
+    public string Short() {
+        string s = "";
+        s += "$:" + Money + " ";
+        s += "f:" + Followers + " ";
+        s += "b:" + Belief + " ";
+        s += "r:" + Reputation + " ";
+        return s;
     }
 
     public override string ToString()
@@ -326,24 +398,21 @@ class Program
         while (true)
         {
             Console.WriteLine(sim);
+            Console.Write("> ");
+            string input = Console.ReadLine();
+            int n;
+            bool isNumeric = int.TryParse(input, out n);
 
-            var key = Console.ReadKey().Key;
-            if (key == ConsoleKey.D1)
-            {
-                sim.StartAction(sim.PossibleActions()[0]);
-            }
-            else if (key == ConsoleKey.D2)
-            {
-                sim.StartAction(sim.PossibleActions()[1]);
-            }
-            else if (key == ConsoleKey.Q)
-            {
+            if (input == "q") {
                 break;
             }
-            else
-            {
+            if (isNumeric) {
+                sim.StartAction(sim.PossibleActions()[n-1]);
+            }
+            if (input == "") {
                 sim.Advance(1);
             }
+                
         }
     }
 }
